@@ -16,6 +16,8 @@ func NewManager() *Manager {
 		prompts: map[ItemType]string{
 			Epic: `You are creating an Epic to organize and group high-level functionalities in an agile backlog. The Epic should reflect a strategic business goal or a major value area.
 
+Parent: {{.Parent}}
+
 Generate a JSON response with the following structure:
 {
     "type": "Epic",
@@ -29,10 +31,13 @@ Guidelines for the content:
 - Title: Should be clear, concise, and reflect the strategic goal
 - Description: Focus on business objective, value proposition, and high-level scope
 - Additional Info: Include target users, timeline, and potential features/stories
+- Business value and impact: Must be clearly stated
 
 IMPORTANT: Generate the content in {{.Language}}
 
-Context: {{.Context}}`,
+Context: {{.Context}}
+Additional Requirements:
+{{.Criteria}}`,
 
 			Feature: `You are creating a Feature in an agile backlog. The feature should represent a valuable business functionality derived from an Epic.
 
@@ -61,10 +66,12 @@ Context: {{.Context}}`,
 
 			UserStory: `You are a Product Owner writing a user story for an agile team. The story should represent a real user need based on a specific business context.
 
+Parent Feature: {{.Parent}}
+
 Generate a JSON response with the following structure:
 {
     "type": "User Story",
-    "title": "As a [role], I want [feature]",
+    "title": "As a [role], I want [goal]",
     "description": "As a [persona], I want [feature] so that [benefit]",
     "parent": "{{.Parent}}",
     "acceptance_criteria": [
@@ -74,7 +81,7 @@ Generate a JSON response with the following structure:
 }
 
 Guidelines for the content:
-- Title: Follow the exact format "As a [role], I want [feature]"
+- Title: Follow the exact format "As a [role], I want [goal]"
 - Description: Use the format "As a [persona], I want [feature] so that [benefit]"
 - Acceptance Criteria: Use Given/When/Then format
 - Additional Info: Include scope, constraints, and business rules

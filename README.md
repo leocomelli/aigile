@@ -31,7 +31,25 @@ The following environment variables are required:
 - `LLM_ENDPOINT`: The API endpoint (required for Azure OpenAI)
 
 ### GitHub Configuration
-- `GITHUB_TOKEN`: Your GitHub personal access token
+- `GITHUB_TOKEN`: Your GitHub personal access token. You can use either:
+  - **Fine-grained PAT** (Recommended):
+    1. Go to https://github.com/settings/tokens?type=beta
+    2. Click "Generate new token"
+    3. Select the repository you want to access
+    4. Under "Repository permissions":
+       - "Issues": Read and write
+       - "Projects": Read and write
+    5. Under "Organization permissions" (if using organization projects):
+       - "Projects": Read-only
+  - **Classic PAT**:
+    1. Go to https://github.com/settings/tokens
+    2. Click "Generate new token (classic)"
+    3. Enable "Beta Features"
+    4. Select scopes:
+       - `repo` - Full control of private repositories
+       - `project` - Full control of organization projects
+       - `read:org` - Read organization data
+       - `read:user` - Read user data
 - `GITHUB_OWNER`: The owner of the repository
 - `GITHUB_REPO`: The repository name
 
@@ -39,7 +57,7 @@ The following environment variables are required:
 
 1. Prepare your XLSX file with the following columns:
    - Type: The type of item (Epic, Feature, User Story, Task)
-   - Parent: ID/reference of the parent item (e.g., Epic ID for Features)
+   - Parent: Project name where the issue should be created (e.g., "My Project")
    - Context: Description of what needs to be generated
    - Criteria: Additional validation criteria (optional)
 
@@ -50,6 +68,9 @@ aigile generate -f path/to/your/file.xlsx
 
 # Generate items in a different language
 aigile generate -f path/to/your/file.xlsx -l portuguese
+
+# Run with debug logs
+aigile generate -f path/to/your/file.xlsx --log-level debug
 ```
 
 3. Additional flags:

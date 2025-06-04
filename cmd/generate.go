@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -60,7 +61,10 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		Owner: os.Getenv("GITHUB_OWNER"),
 		Repo:  os.Getenv("GITHUB_REPO"),
 	}
-	githubProvider := provider.NewGitHubProvider(githubConfig)
+	githubProvider, err := provider.NewGitHubProvider(githubConfig)
+	if err != nil {
+		return fmt.Errorf("failed to initialize GitHub provider: %w", err)
+	}
 
 	// Process each item
 	for _, item := range items {
@@ -81,11 +85,25 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			title = fmt.Sprintf("[%s] %s", item.Type, item.Context[:50])
 		}
 
+		// Get project info if parent is specified
+		var project *provider.ProjectInfo
+		if item.Parent != "" {
+			slog.Debug("searching for project from parent field", "parent", item.Parent)
+			var err error
+			project, err = githubProvider.GetProjectByName(context.Background(), item.Parent)
+			if err != nil {
+				slog.Warn("failed to get project info", "parent", item.Parent, "error", err)
+			} else {
+				slog.Debug("project found", "number", project.ProjectNumber, "owner", project.ProjectOwner)
+			}
+		}
+
 		fullDescription := formatDescription(content)
-		if err := githubProvider.CreateIssue(title, fullDescription, []string{item.Type.String()}); err != nil {
+		createdIssue, err := githubProvider.CreateIssue(title, fullDescription, []string{item.Type.String()}, project)
+		if err != nil {
 			return fmt.Errorf("failed to create issue: %w", err)
 		}
-		slog.Info("issue created", "type", item.Type, "title", title)
+		slog.Info("issue created", "type", item.Type, "title", title, "number", createdIssue.GetNumber(), "project", project)
 	}
 
 	return nil

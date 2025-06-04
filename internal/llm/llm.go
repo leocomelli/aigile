@@ -4,6 +4,11 @@ import (
 	"github.com/leocomelli/aigile/internal/prompt"
 )
 
+// LLMProvider is the interface for LLM providers
+type LLMProvider interface {
+	GenerateContent(itemType prompt.ItemType, parent, context string, criteria []string, language string) (*GeneratedContent, error)
+}
+
 // GeneratedContent represents the structured output from the LLM
 type GeneratedContent struct {
 	Title              string   `json:"title"`
@@ -14,10 +19,7 @@ type GeneratedContent struct {
 	Type               string   `json:"type"`
 }
 
-type LLMProvider interface {
-	GenerateContent(itemType prompt.ItemType, parent, context string, criteria []string, language string) (*GeneratedContent, error)
-}
-
+// Config represents the configuration for the LLM provider
 type Config struct {
 	Provider string
 	APIKey   string
