@@ -6,6 +6,7 @@ toolchain go1.24.3
 
 require (
 	github.com/google/go-github/v60 v60.0.0
+	github.com/lmittmann/tint v1.1.2
 	github.com/sashabaranov/go-openai v1.19.4
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.8.4

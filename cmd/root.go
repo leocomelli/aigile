@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/lmittmann/tint"
 	"github.com/spf13/cobra"
 )
 
@@ -15,9 +16,11 @@ var (
 		Short: "A tool to generate User Stories and Tasks",
 		Long:  `Aigile is a CLI tool that helps you generate User Stories and Tasks using LLMs (OpenAI, Gemini, Azure OpenAI) and integrates with GitHub Projects or Azure DevOps.`,
 		PersistentPreRun: func(_ *cobra.Command, _ []string) {
-			logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-				Level: GetLogLevel(),
-			}))
+			handler := tint.NewHandler(os.Stdout, &tint.Options{
+				Level:      GetLogLevel(),
+				TimeFormat: "15:04:05",
+			})
+			logger := slog.New(handler)
 			slog.SetDefault(logger)
 			slog.Info("starting aigile", "log_level", logLevel)
 		},
