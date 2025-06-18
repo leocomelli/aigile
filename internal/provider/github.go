@@ -1,3 +1,4 @@
+// Package provider implementa integrações com serviços externos como GitHub e Azure DevOps.
 package provider
 
 import (
@@ -10,17 +11,18 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// IssuesService interface for GitHub Issues API
+// IssuesService interface for GitHub Issues API.
 type IssuesService interface {
 	Create(ctx context.Context, owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
 	Edit(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
 }
 
-// RepositoriesService interface for GitHub Repositories API
+// RepositoriesService interface for GitHub Repositories API.
 type RepositoriesService interface {
 	Get(ctx context.Context, owner string, repo string) (*github.Repository, *github.Response, error)
 }
 
+// GitHubProvider provides methods to interact with GitHub Issues and Projects.
 type GitHubProvider struct {
 	issues IssuesService
 	repos  RepositoriesService
@@ -29,19 +31,21 @@ type GitHubProvider struct {
 	client *github.Client
 }
 
+// GitHubConfig holds the configuration for the GitHub provider.
 type GitHubConfig struct {
 	Token string
 	Owner string
 	Repo  string
 }
 
+// ProjectInfo holds information about a GitHub Project v2.
 type ProjectInfo struct {
 	ProjectNumber int    // The project number (visible in the project URL)
 	ProjectOwner  string // The owner of the project (user or organization)
 	ProjectID     string // The project's node ID
 }
 
-// GraphQL queries/mutations as constants for clarity and reuse
+// GraphQL queries/mutations as constants for clarity and reuse.
 const (
 	queryProjectV2ByName = `query($owner: String!) {
 		repositoryOwner(login: $owner) {
@@ -66,13 +70,14 @@ const (
 		}
 	}`
 
-	mutationAddProjectV2ItemById = `mutation($projectId: ID!, $contentId: ID!) {
+	mutationAddProjectV2ItemByID = `mutation($projectId: ID!, $contentId: ID!) {
 		addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
 			item { id content { ... on Issue { number title } } }
 		}
 	}`
 )
 
+// NewGitHubProvider creates a new GitHubProvider with the given configuration.
 func NewGitHubProvider(config GitHubConfig) (*GitHubProvider, error) {
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(
@@ -92,6 +97,7 @@ func NewGitHubProvider(config GitHubConfig) (*GitHubProvider, error) {
 	return provider, nil
 }
 
+// CreateIssue creates a new issue in the configured GitHub repository and optionally adds it to a project.
 func (p *GitHubProvider) CreateIssue(title, description string, labels []string, project *ProjectInfo) (*github.Issue, error) {
 	ctx := context.Background()
 
@@ -104,7 +110,9 @@ func (p *GitHubProvider) CreateIssue(title, description string, labels []string,
 	createdIssue, resp, err := p.issues.Create(ctx, p.owner, p.repo, issue)
 	if err != nil {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
+		}
 		bodyStr := string(bodyBytes)
 		return nil, fmt.Errorf("failed to create issue (status: %s, body: %s): %w", resp.Status, bodyStr, err)
 	}
@@ -121,7 +129,7 @@ func (p *GitHubProvider) CreateIssue(title, description string, labels []string,
 	return createdIssue, nil
 }
 
-// GetProjectByName fetches project information using the project name
+// GetProjectByName fetches project information using the project name.
 func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName string) (*ProjectInfo, error) {
 	slog.Debug("searching for project", "name", projectName, "owner", p.owner)
 
@@ -155,7 +163,11 @@ func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName strin
 	resp, err := p.client.Do(ctx, req, &result)
 	if err != nil {
 		if resp != nil && resp.Body != nil {
-			defer resp.Body.Close()
+			defer func() {
+				if cerr := resp.Body.Close(); cerr != nil {
+					slog.Warn("failed to close response body", "error", cerr)
+				}
+			}()
 			if resp.StatusCode != 200 {
 				bodyBytes, _ := io.ReadAll(resp.Body)
 				return nil, fmt.Errorf("failed to get projects (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
@@ -163,7 +175,11 @@ func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName strin
 		}
 		return nil, fmt.Errorf("failed to execute GraphQL request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
+		}
+	}()
 
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -193,7 +209,7 @@ func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName strin
 	return nil, fmt.Errorf("project not found: %s", projectName)
 }
 
-// AddIssueToProject adds an existing issue to a GitHub Project v2 using addProjectV2ItemById
+// addIssueToProject adds an existing issue to a GitHub Project v2 using addProjectV2ItemById.
 func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Issue, project *ProjectInfo) error {
 	slog.Debug("adding issue to project",
 		"issue_number", issue.GetNumber(),
@@ -230,24 +246,34 @@ func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Is
 	resp, err := p.client.Do(ctx, req, &issueResult)
 	if err != nil {
 		if resp != nil && resp.Body != nil {
-			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
 				bodyBytes, _ := io.ReadAll(resp.Body)
+				if cerr := resp.Body.Close(); cerr != nil {
+					slog.Warn("failed to close response body", "error", cerr)
+				}
 				return fmt.Errorf("failed to get issue (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+			}
+			if cerr := resp.Body.Close(); cerr != nil {
+				slog.Warn("failed to close response body", "error", cerr)
 			}
 		}
 		return fmt.Errorf("failed to execute GraphQL request for issue: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
+		}
 		return fmt.Errorf("failed to get issue (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
 	}
 
 	if len(issueResult.Errors) > 0 {
 		for _, err := range issueResult.Errors {
 			slog.Error("graphql error", "message", err.Message)
+		}
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
 		}
 		return fmt.Errorf("graphql errors occurred while getting issue")
 	}
@@ -260,7 +286,7 @@ func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Is
 	// 2. Adicionar ao projeto
 	varsMutation := map[string]interface{}{"projectId": project.ProjectID, "contentId": issueResult.Data.Repository.Issue.ID}
 	req, err = p.client.NewRequest("POST", "graphql", map[string]interface{}{
-		"query":     mutationAddProjectV2ItemById,
+		"query":     mutationAddProjectV2ItemByID,
 		"variables": varsMutation,
 	})
 	if err != nil {
@@ -269,7 +295,7 @@ func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Is
 
 	var mutationResult struct {
 		Data struct {
-			AddProjectV2ItemById struct {
+			AddProjectV2ItemByID struct {
 				Item struct {
 					ID      string `json:"id"`
 					Content struct {
@@ -286,19 +312,35 @@ func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Is
 
 	resp, err = p.client.Do(ctx, req, &mutationResult)
 	if err != nil {
-		if resp != nil && resp.Body != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				bodyBytes, _ := io.ReadAll(resp.Body)
-				return fmt.Errorf("failed to add issue to project (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+		if resp == nil || resp.Body == nil {
+			return fmt.Errorf("failed to execute GraphQL request for adding to project: %w", err)
+		}
+		if resp.StatusCode != 200 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			if cerr := resp.Body.Close(); cerr != nil {
+				slog.Warn("failed to close response body", "error", cerr)
 			}
+			return fmt.Errorf("failed to add issue to project (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+		}
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
 		}
 		return fmt.Errorf("failed to execute GraphQL request for adding to project: %w", err)
 	}
-	defer resp.Body.Close()
+	if resp == nil || resp.Body == nil {
+		return fmt.Errorf("response or response body is nil after GraphQL request for adding to project")
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
+		}
+	}()
 
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
+		}
 		return fmt.Errorf("failed to add issue to project (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -312,7 +354,7 @@ func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Is
 	slog.Info("issue added to project",
 		"issue_number", issueResult.Data.Repository.Issue.Number,
 		"project_number", project.ProjectNumber,
-		"project_item_id", mutationResult.Data.AddProjectV2ItemById.Item.ID,
-		"issue_title", mutationResult.Data.AddProjectV2ItemById.Item.Content.Title)
+		"project_item_id", mutationResult.Data.AddProjectV2ItemByID.Item.ID,
+		"issue_title", mutationResult.Data.AddProjectV2ItemByID.Item.Content.Title)
 	return nil
 }

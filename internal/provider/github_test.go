@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// mockIssuesService is a mock implementation of the IssuesService interface for testing.
 type mockIssuesService struct {
 	mock.Mock
 }
@@ -27,6 +28,7 @@ func (m *mockIssuesService) Edit(ctx context.Context, owner string, repo string,
 	return args.Get(0).(*github.Issue), args.Get(1).(*github.Response), args.Error(2)
 }
 
+// mockHTTPClient is a mock implementation of the HTTP client for testing GraphQL requests.
 type mockHTTPClient struct {
 	mock.Mock
 }
@@ -36,6 +38,7 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return args.Get(0).(*http.Response), args.Error(1)
 }
 
+// TestGitHubProvider_CreateIssue_Success tests successful creation of a GitHub issue.
 func TestGitHubProvider_CreateIssue_Success(t *testing.T) {
 	// Arrange
 	mockIssues := new(mockIssuesService)
@@ -84,6 +87,7 @@ func TestGitHubProvider_CreateIssue_Success(t *testing.T) {
 	mockIssues.AssertExpectations(t)
 }
 
+// TestGitHubProvider_CreateIssue_WithProject tests creating a GitHub issue and adding it to a project.
 func TestGitHubProvider_CreateIssue_WithProject(t *testing.T) {
 	// Arrange
 	mockIssues := new(mockIssuesService)
@@ -134,6 +138,7 @@ func TestGitHubProvider_CreateIssue_WithProject(t *testing.T) {
 	// We do not test the real GraphQL call, but we ensure the flow does not break
 }
 
+// TestGitHubProvider_CreateIssue_Error tests error handling when issue creation fails.
 func TestGitHubProvider_CreateIssue_Error(t *testing.T) {
 	// Arrange
 	mockIssues := new(mockIssuesService)
@@ -172,6 +177,7 @@ func TestGitHubProvider_CreateIssue_Error(t *testing.T) {
 	mockIssues.AssertExpectations(t)
 }
 
+// TestGitHubProvider_New tests the creation of a new GitHubProvider instance.
 func TestGitHubProvider_New(t *testing.T) {
 	// Arrange
 	config := GitHubConfig{
@@ -193,6 +199,7 @@ func TestGitHubProvider_New(t *testing.T) {
 	assert.NotNil(t, provider.client)
 }
 
+// mockTransport is a mock implementation of http.RoundTripper for testing.
 type mockTransport struct {
 	mock *mockHTTPClient
 }
@@ -201,6 +208,7 @@ func (t *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.mock.Do(req)
 }
 
+// TestGitHubProvider_GetProjectByName_Success tests fetching a project by name successfully.
 func TestGitHubProvider_GetProjectByName_Success(t *testing.T) {
 	// Arrange
 	mockClient := new(mockHTTPClient)
@@ -229,6 +237,7 @@ func TestGitHubProvider_GetProjectByName_Success(t *testing.T) {
 	assert.Equal(t, 1, project.ProjectNumber)
 }
 
+// TestGitHubProvider_GetProjectByName_NotFound tests error handling when the project is not found.
 func TestGitHubProvider_GetProjectByName_NotFound(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -252,6 +261,7 @@ func TestGitHubProvider_GetProjectByName_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "project not found")
 }
 
+// TestGitHubProvider_GetProjectByName_RequestError tests error handling for request errors in GetProjectByName.
 func TestGitHubProvider_GetProjectByName_RequestError(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -275,6 +285,7 @@ func TestGitHubProvider_GetProjectByName_RequestError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to execute GraphQL request")
 }
 
+// TestGitHubProvider_GetProjectByName_GraphQLError tests error handling for GraphQL errors in GetProjectByName.
 func TestGitHubProvider_GetProjectByName_GraphQLError(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -298,6 +309,7 @@ func TestGitHubProvider_GetProjectByName_GraphQLError(t *testing.T) {
 	assert.Contains(t, err.Error(), "graphql errors occurred")
 }
 
+// TestGitHubProvider_GetProjectByName_StatusCodeNot200 tests error handling for non-200 status codes in GetProjectByName.
 func TestGitHubProvider_GetProjectByName_StatusCodeNot200(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -320,6 +332,7 @@ func TestGitHubProvider_GetProjectByName_StatusCodeNot200(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to get projects (status: 404, body: not found)")
 }
 
+// TestGitHubProvider_GetProjectByName_MalformedJSON tests error handling for malformed JSON responses in GetProjectByName.
 func TestGitHubProvider_GetProjectByName_MalformedJSON(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -341,6 +354,7 @@ func TestGitHubProvider_GetProjectByName_MalformedJSON(t *testing.T) {
 	assert.Nil(t, project)
 }
 
+// TestGitHubProvider_addIssueToProject_Success tests successfully adding an issue to a project.
 func TestGitHubProvider_addIssueToProject_Success(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -372,6 +386,7 @@ func TestGitHubProvider_addIssueToProject_Success(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestGitHubProvider_addIssueToProject_NodeIDError tests error handling when fetching the issue node ID fails.
 func TestGitHubProvider_addIssueToProject_NodeIDError(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -395,6 +410,7 @@ func TestGitHubProvider_addIssueToProject_NodeIDError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to execute GraphQL request for issue")
 }
 
+// TestGitHubProvider_addIssueToProject_AddProjectError tests error handling when adding an issue to a project fails.
 func TestGitHubProvider_addIssueToProject_AddProjectError(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -426,6 +442,7 @@ func TestGitHubProvider_addIssueToProject_AddProjectError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to execute GraphQL request for adding to project")
 }
 
+// TestGitHubProvider_addIssueToProject_GraphQLError tests error handling for GraphQL errors when adding an issue to a project.
 func TestGitHubProvider_addIssueToProject_GraphQLError(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
@@ -451,6 +468,7 @@ func TestGitHubProvider_addIssueToProject_GraphQLError(t *testing.T) {
 	assert.Contains(t, err.Error(), "graphql errors occurred while getting issue")
 }
 
+// TestGitHubProvider_addIssueToProject_StatusCodeNot200 tests error handling for non-200 status codes when adding an issue to a project.
 func TestGitHubProvider_addIssueToProject_StatusCodeNot200(t *testing.T) {
 	mockClient := new(mockHTTPClient)
 	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})

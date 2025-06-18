@@ -25,8 +25,7 @@ integration-test:
 	$(GO) test -v -race -tags=integration ./internal/provider -run Integration
 
 lint:
-	$(GO) install golang.org/x/lint/golint@latest
-	$(GOBIN)/golint ./...
+	export GOROOT=$(go env GOROOT) && golangci-lint run --config .golangci.yml ./...
 
 clean:
 	$(GO) clean

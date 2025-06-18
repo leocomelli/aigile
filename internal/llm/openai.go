@@ -1,3 +1,4 @@
+// Package llm provides the OpenAI implementation for LLMProvider.
 package llm
 
 import (
@@ -10,24 +11,24 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-// Interface for OpenAI client
-// Allows mocking in tests
-// Only the method used is included
-
+// ChatClient is an interface for the OpenAI client, allowing mocking in tests.
 type ChatClient interface {
 	CreateChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error)
 }
 
+// PromptManager is an interface for managing prompts for LLMs.
 type PromptManager interface {
 	GetPrompt(itemType prompt.ItemType, parent, ctx string, criteria []string, language string, generateTasks bool) (string, error)
 }
 
+// OpenAIProvider implements the Provider interface for OpenAI.
 type OpenAIProvider struct {
 	client  ChatClient
 	model   string
 	prompts PromptManager
 }
 
+// NewOpenAIProvider creates a new OpenAIProvider with the given config.
 func NewOpenAIProvider(config Config) *OpenAIProvider {
 	client := openai.NewClient(config.APIKey)
 	return &OpenAIProvider{
@@ -37,6 +38,7 @@ func NewOpenAIProvider(config Config) *OpenAIProvider {
 	}
 }
 
+// GenerateContent generates content using the OpenAI API based on the provided parameters.
 func (p *OpenAIProvider) GenerateContent(itemType prompt.ItemType, parent, ctx string, criteria []string, language string, generateTasks bool) (*GeneratedContent, error) {
 	// Get the appropriate prompt for the item type
 	promptText, err := p.prompts.GetPrompt(itemType, parent, ctx, criteria, language, generateTasks)
@@ -82,7 +84,7 @@ func (p *OpenAIProvider) GenerateContent(itemType prompt.ItemType, parent, ctx s
 	return &result, nil
 }
 
-// cleanJSONResponse removes any non-JSON content from the response
+// cleanJSONResponse removes any non-JSON content from the response string and returns only the JSON part.
 func cleanJSONResponse(content string) string {
 	// Find the first '{' and last '}'
 	start := strings.Index(content, "{")
@@ -96,7 +98,7 @@ func cleanJSONResponse(content string) string {
 	return content[start : end+1]
 }
 
-// validateGeneratedContent ensures all required fields are present
+// validateGeneratedContent ensures all required fields are present in the GeneratedContent struct.
 func validateGeneratedContent(content *GeneratedContent) error {
 	if content.Title == "" {
 		return fmt.Errorf("title is required")

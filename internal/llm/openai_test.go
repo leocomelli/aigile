@@ -18,6 +18,7 @@ func (m *mockPromptManager) GetPrompt(itemType prompt.ItemType, parent, ctx stri
 	return m.getPromptFunc(itemType, parent, ctx, criteria, language, generateTasks)
 }
 
+// TestNewOpenAIProvider tests the creation of a new OpenAIProvider instance.
 func TestNewOpenAIProvider(t *testing.T) {
 	provider := NewOpenAIProvider(Config{APIKey: "key", Model: "gpt"})
 	assert.NotNil(t, provider)
@@ -73,6 +74,7 @@ func TestOpenAIProvider_GenerateContent_PromptError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to get prompt")
 }
 
+// TestOpenAIProvider_GenerateContent_APIError tests error handling when the OpenAI API returns an error.
 func TestOpenAIProvider_GenerateContent_APIError(t *testing.T) {
 	provider := &OpenAIProvider{
 		client: &mockOpenAIClient{
@@ -91,6 +93,7 @@ func TestOpenAIProvider_GenerateContent_APIError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to generate content")
 }
 
+// TestOpenAIProvider_GenerateContent_InvalidJSON tests error handling for invalid JSON responses from the API.
 func TestOpenAIProvider_GenerateContent_InvalidJSON(t *testing.T) {
 	provider := &OpenAIProvider{
 		client: &mockOpenAIClient{
@@ -113,6 +116,7 @@ func TestOpenAIProvider_GenerateContent_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse JSON response")
 }
 
+// TestOpenAIProvider_GenerateContent_ValidationError tests validation errors for missing required fields in the generated content.
 func TestOpenAIProvider_GenerateContent_ValidationError(t *testing.T) {
 	provider := &OpenAIProvider{
 		client: &mockOpenAIClient{
@@ -135,6 +139,7 @@ func TestOpenAIProvider_GenerateContent_ValidationError(t *testing.T) {
 	assert.Contains(t, err.Error(), "title is required")
 }
 
+// Test_cleanJSONResponse tests the cleanJSONResponse utility function.
 func Test_cleanJSONResponse(t *testing.T) {
 	json := `foo {"a":1} bar`
 	out := cleanJSONResponse(json)
@@ -145,6 +150,7 @@ func Test_cleanJSONResponse(t *testing.T) {
 	assert.Equal(t, "nojson", out)
 }
 
+// Test_validateGeneratedContent tests the validateGeneratedContent utility function.
 func Test_validateGeneratedContent(t *testing.T) {
 	c := &GeneratedContent{Title: "t", Description: "d", Type: "User Story", AcceptanceCriteria: []string{"a"}}
 	assert.NoError(t, validateGeneratedContent(c))

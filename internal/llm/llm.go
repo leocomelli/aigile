@@ -1,15 +1,16 @@
+// Package llm provides interfaces and implementations for Large Language Model providers.
 package llm
 
 import (
 	"github.com/leocomelli/aigile/internal/prompt"
 )
 
-// LLMProvider is the interface for LLM providers
-type LLMProvider interface {
+// Provider defines the interface for Large Language Model providers used to generate content.
+type Provider interface {
 	GenerateContent(itemType prompt.ItemType, parent, context string, criteria []string, language string, generateTasks bool) (*GeneratedContent, error)
 }
 
-// GeneratedContent represents the structured output from the LLM
+// GeneratedContent represents the structured output returned by the LLM provider.
 type GeneratedContent struct {
 	Title              string   `json:"title"`
 	Description        string   `json:"description"`
@@ -18,7 +19,7 @@ type GeneratedContent struct {
 	Type               string   `json:"type"`
 }
 
-// Config represents the configuration for the LLM provider
+// Config holds the configuration parameters for the LLM provider.
 type Config struct {
 	Provider string
 	APIKey   string

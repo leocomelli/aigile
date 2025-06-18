@@ -1,3 +1,4 @@
+// Package prompt gerencia templates e utilitários para geração de prompts para LLMs.
 package prompt
 
 import (
@@ -55,7 +56,7 @@ Do not include any explanations, comments, or instructional text in the output. 
 	}
 }
 
-// GetPrompt returns the prompt for the given item type
+// GetPrompt returns the prompt string for the given item type and context, filling in template variables.
 func (m *Manager) GetPrompt(itemType ItemType, parent, context string, criteria []string, language string, generateTasks bool) (string, error) {
 	promptTemplate, ok := m.prompts[itemType]
 	if !ok {
@@ -79,7 +80,7 @@ func (m *Manager) GetPrompt(itemType ItemType, parent, context string, criteria 
 	return prompt, nil
 }
 
-// SetPrompt allows customizing the prompt for a specific item type
+// SetPrompt allows customizing the prompt template for a specific item type.
 func (m *Manager) SetPrompt(itemType ItemType, prompt string) error {
 	if !itemType.IsValid() {
 		return fmt.Errorf("invalid item type: %s", itemType)

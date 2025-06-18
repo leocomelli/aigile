@@ -90,6 +90,7 @@ func TestManager_SetPrompt(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// boolToString converts a boolean value to its string representation ("true" or "false").
 func boolToString(b bool) string {
 	if b {
 		return "true"

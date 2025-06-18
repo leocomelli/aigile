@@ -7,13 +7,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// rootCmd is the base command for the aigile CLI application.
 var (
 	logLevel string
 	rootCmd  = &cobra.Command{
 		Use:   "aigile",
 		Short: "A tool to generate User Stories and Tasks",
 		Long:  `Aigile is a CLI tool that helps you generate User Stories and Tasks using LLMs (OpenAI, Gemini, Azure OpenAI) and integrates with GitHub Projects or Azure DevOps.`,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 				Level: GetLogLevel(),
 			}))
@@ -41,6 +42,7 @@ func GetLogLevel() slog.Level {
 	}
 }
 
+// Execute runs the root command for the CLI application.
 func Execute() error {
 	return rootCmd.Execute()
 }

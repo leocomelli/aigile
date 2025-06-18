@@ -3,6 +3,7 @@ package prompt
 // ItemType represents the type of agile item
 type ItemType string
 
+// UserStory represents the 'User Story' agile item type.
 const (
 	UserStory ItemType = "User Story"
 )

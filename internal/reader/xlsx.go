@@ -1,3 +1,4 @@
+// Package reader provides utilities to read and parse XLSX files for aigile.
 package reader
 
 import (
@@ -7,6 +8,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// Item represents a row/item read from the XLSX file.
 type Item struct {
 	Type     prompt.ItemType
 	Parent   string
@@ -14,22 +16,30 @@ type Item struct {
 	Criteria []string
 }
 
+// XLSXReader reads items from an XLSX file.
 type XLSXReader struct {
 	filePath string
 }
 
+// NewXLSXReader creates a new XLSXReader for the given file path.
 func NewXLSXReader(filePath string) *XLSXReader {
 	return &XLSXReader{
 		filePath: filePath,
 	}
 }
 
+// Read reads the XLSX file and returns a slice of Items or an error.
 func (r *XLSXReader) Read() ([]Item, error) {
 	f, err := excelize.OpenFile(r.filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			fmt.Printf("failed to close xlsx file: %v\n", err)
+		}
+	}()
 
 	sheets := f.GetSheetList()
 	if len(sheets) == 0 {

@@ -1,3 +1,4 @@
+// Package cmd implements the CLI commands for aigile.
 package cmd
 
 import (
@@ -25,10 +26,13 @@ func init() {
 	generateCmd.Flags().StringP("file", "f", "", "Path to XLSX file")
 	generateCmd.Flags().StringP("language", "g", "english", "Language to generate the content (e.g., english, portuguese)")
 	generateCmd.Flags().Bool("auto-tasks", false, "Automatically generate and create tasks for each user story")
-	generateCmd.MarkFlagRequired("file")
+	if err := generateCmd.MarkFlagRequired("file"); err != nil {
+		panic(fmt.Sprintf("failed to mark 'file' flag as required: %v", err))
+	}
 }
 
-func runGenerate(cmd *cobra.Command, args []string) error {
+// runGenerate is the main handler for the 'generate' command, processing the XLSX file and creating issues.
+func runGenerate(cmd *cobra.Command, _ []string) error {
 	filePath, _ := cmd.Flags().GetString("file")
 	language, _ := cmd.Flags().GetString("language")
 	autoTasks, _ := cmd.Flags().GetBool("auto-tasks")
@@ -49,7 +53,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		Endpoint: os.Getenv("LLM_ENDPOINT"),
 	}
 
-	var llmProvider llm.LLMProvider
+	var llmProvider llm.Provider
 	switch llmConfig.Provider {
 	case "openai", "":
 		llmProvider = llm.NewOpenAIProvider(llmConfig)
