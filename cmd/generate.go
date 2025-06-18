@@ -16,7 +16,7 @@ import (
 var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate items from XLSX file",
-	Long:  `Generate Epics, Features, User Stories and Tasks from an XLSX file using LLM and create them in GitHub/Azure DevOps.`,
+	Long:  `Generate User Stories from an XLSX file using LLM and create them in GitHub/Azure DevOps.`,
 	RunE:  runGenerate,
 }
 
@@ -24,13 +24,15 @@ func init() {
 	rootCmd.AddCommand(generateCmd)
 	generateCmd.Flags().StringP("file", "f", "", "Path to XLSX file")
 	generateCmd.Flags().StringP("language", "g", "english", "Language to generate the content (e.g., english, portuguese)")
+	generateCmd.Flags().Bool("auto-tasks", false, "Automatically generate and create tasks for each user story")
 	generateCmd.MarkFlagRequired("file")
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
 	filePath, _ := cmd.Flags().GetString("file")
 	language, _ := cmd.Flags().GetString("language")
-	slog.Info("starting generate command", "file", filePath, "language", language)
+	autoTasks, _ := cmd.Flags().GetBool("auto-tasks")
+	slog.Info("starting generate command", "file", filePath, "language", language, "autoTasks", autoTasks)
 
 	// Initialize XLSX reader
 	xlsxReader := reader.NewXLSXReader(filePath)
@@ -74,6 +76,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			item.Context,
 			item.Criteria,
 			language,
+			autoTasks,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to generate content: %w", err)
@@ -104,6 +107,21 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to create issue: %w", err)
 		}
 		slog.Info("issue created", "type", item.Type, "title", title, "number", createdIssue.GetNumber(), "project", project)
+
+		// If the auto-tasks flag is enabled and there are suggested tasks, create issues for each task
+		if autoTasks && len(content.SuggestedTasks) > 0 {
+			for _, task := range content.SuggestedTasks {
+				taskTitle := fmt.Sprintf("[Task] %s", task)
+				taskDescription := fmt.Sprintf("Task for User Story #%d: %s\n\n%s", createdIssue.GetNumber(), title, task)
+
+				_, err := githubProvider.CreateIssue(taskTitle, taskDescription, []string{"Task"}, project)
+				if err != nil {
+					slog.Warn("failed to create task issue", "task", task, "error", err)
+					continue
+				}
+				slog.Info("task issue created", "task", task)
+			}
+		}
 	}
 
 	return nil
@@ -116,11 +134,6 @@ func formatDescription(content *llm.GeneratedContent) string {
 	sb.WriteString(content.Description)
 	sb.WriteString("\n\n")
 
-	// Add parent reference if available
-	if content.Parent != "" {
-		sb.WriteString(fmt.Sprintf("Parent: %s\n\n", content.Parent))
-	}
-
 	// Add acceptance criteria if available
 	if len(content.AcceptanceCriteria) > 0 {
 		sb.WriteString("## Acceptance Criteria\n")
@@ -130,10 +143,12 @@ func formatDescription(content *llm.GeneratedContent) string {
 		sb.WriteString("\n")
 	}
 
-	// Add additional info if available
-	if content.AdditionalInfo != "" {
-		sb.WriteString("## Additional Information\n")
-		sb.WriteString(content.AdditionalInfo)
+	// Add suggested tasks if available
+	if len(content.SuggestedTasks) > 0 {
+		sb.WriteString("## Suggested Tasks\n")
+		for i, task := range content.SuggestedTasks {
+			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, task))
+		}
 		sb.WriteString("\n")
 	}
 

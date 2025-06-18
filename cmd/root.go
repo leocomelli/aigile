@@ -11,8 +11,8 @@ var (
 	logLevel string
 	rootCmd  = &cobra.Command{
 		Use:   "aigile",
-		Short: "A tool to generate Epics, Features, User Stories and Tasks",
-		Long:  `Aigile is a CLI tool that helps you generate Epics, Features, User Stories and Tasks using LLMs (OpenAI, Gemini, Azure OpenAI) and integrates with GitHub Projects or Azure DevOps.`,
+		Short: "A tool to generate User Stories and Tasks",
+		Long:  `Aigile is a CLI tool that helps you generate User Stories and Tasks using LLMs (OpenAI, Gemini, Azure OpenAI) and integrates with GitHub Projects or Azure DevOps.`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 				Level: GetLogLevel(),

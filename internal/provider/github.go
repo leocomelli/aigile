@@ -41,6 +41,38 @@ type ProjectInfo struct {
 	ProjectID     string // The project's node ID
 }
 
+// GraphQL queries/mutations as constants for clarity and reuse
+const (
+	queryProjectV2ByName = `query($owner: String!) {
+		repositoryOwner(login: $owner) {
+			... on User {
+				projectsV2(first: 100) {
+					nodes { id number title }
+					totalCount
+				}
+			}
+			... on Organization {
+				projectsV2(first: 100) {
+					nodes { id number title }
+					totalCount
+				}
+			}
+		}
+	}`
+
+	queryIssueNodeID = `query($owner: String!, $repo: String!, $number: Int!) {
+		repository(owner: $owner, name: $repo) {
+			issue(number: $number) { id number title }
+		}
+	}`
+
+	mutationAddProjectV2ItemById = `mutation($projectId: ID!, $contentId: ID!) {
+		addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+			item { id content { ... on Issue { number title } } }
+		}
+	}`
+)
+
 func NewGitHubProvider(config GitHubConfig) (*GitHubProvider, error) {
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(
@@ -93,36 +125,10 @@ func (p *GitHubProvider) CreateIssue(title, description string, labels []string,
 func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName string) (*ProjectInfo, error) {
 	slog.Debug("searching for project", "name", projectName, "owner", p.owner)
 
-	// GraphQL query to get project information
-	query := fmt.Sprintf(`
-		query {
-			repositoryOwner(login: "%s") {
-				... on User {
-					projects(first: 100, orderBy: {field: TITLE, direction: ASC}) {
-						nodes {
-							id
-							number
-							title
-						}
-						totalCount
-					}
-				}
-				... on Organization {
-					projects(first: 100, orderBy: {field: TITLE, direction: ASC}) {
-						nodes {
-							id
-							number
-							title
-						}
-						totalCount
-					}
-				}
-			}
-		}
-	`, p.owner)
-
+	vars := map[string]interface{}{"owner": p.owner}
 	req, err := p.client.NewRequest("POST", "graphql", map[string]interface{}{
-		"query": query,
+		"query":     queryProjectV2ByName,
+		"variables": vars,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GraphQL request: %w", err)
@@ -131,14 +137,14 @@ func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName strin
 	var result struct {
 		Data struct {
 			RepositoryOwner struct {
-				Projects struct {
+				ProjectsV2 struct {
 					Nodes []struct {
 						ID     string `json:"id"`
 						Number int    `json:"number"`
 						Title  string `json:"title"`
 					} `json:"nodes"`
 					TotalCount int `json:"totalCount"`
-				} `json:"projects"`
+				} `json:"projectsV2"`
 			} `json:"repositoryOwner"`
 		} `json:"data"`
 		Errors []struct {
@@ -148,16 +154,22 @@ func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName strin
 
 	resp, err := p.client.Do(ctx, req, &result)
 	if err != nil {
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				return nil, fmt.Errorf("failed to get projects (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+			}
+		}
 		return nil, fmt.Errorf("failed to execute GraphQL request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get project (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("failed to get projects (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
 	}
 
-	// Log GraphQL errors if any
 	if len(result.Errors) > 0 {
 		for _, err := range result.Errors {
 			slog.Error("graphql error", "message", err.Message)
@@ -165,49 +177,123 @@ func (p *GitHubProvider) GetProjectByName(ctx context.Context, projectName strin
 		return nil, fmt.Errorf("graphql errors occurred")
 	}
 
-	slog.Debug("found projects", "total_count", result.Data.RepositoryOwner.Projects.TotalCount)
+	slog.Debug("found projects", "total_count", result.Data.RepositoryOwner.ProjectsV2.TotalCount)
 
-	// Check if project was found
-	for _, project := range result.Data.RepositoryOwner.Projects.Nodes {
+	for _, project := range result.Data.RepositoryOwner.ProjectsV2.Nodes {
 		slog.Debug("checking project", "title", project.Title, "number", project.Number)
 		if project.Title == projectName {
+			slog.Info("found project", "title", project.Title, "number", project.Number)
 			return &ProjectInfo{
-				ProjectNumber: project.Number,
-				ProjectOwner:  p.owner,
 				ProjectID:     project.ID,
+				ProjectNumber: project.Number,
 			}, nil
 		}
 	}
 
-	return nil, fmt.Errorf("project '%s' not found (searched in %s's projects)", projectName, p.owner)
+	return nil, fmt.Errorf("project not found: %s", projectName)
 }
 
+// AddIssueToProject adds an existing issue to a GitHub Project v2 using addProjectV2ItemById
 func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Issue, project *ProjectInfo) error {
-	// The mutation to add an item to a project
-	mutation := fmt.Sprintf(`
-		mutation {
-			addProjectItemById(input: {
-				projectId: "%s"
-				contentId: "%s"
-			}) {
-				item {
-					id
-				}
-			}
-		}
-	`, project.ProjectID, issue.GetNodeID())
+	slog.Debug("adding issue to project",
+		"issue_number", issue.GetNumber(),
+		"project_number", project.ProjectNumber,
+		"project_id", project.ProjectID,
+		"owner", p.owner,
+		"repo", p.repo)
 
-	// Execute the GraphQL mutation
+	// 1. Buscar node_id da issue
+	vars := map[string]interface{}{"owner": p.owner, "repo": p.repo, "number": issue.GetNumber()}
 	req, err := p.client.NewRequest("POST", "graphql", map[string]interface{}{
-		"query": mutation,
+		"query":     queryIssueNodeID,
+		"variables": vars,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create GraphQL request: %w", err)
+		return fmt.Errorf("failed to create GraphQL request for issue: %w", err)
 	}
 
-	resp, err := p.client.Do(ctx, req, nil)
+	var issueResult struct {
+		Data struct {
+			Repository struct {
+				Issue struct {
+					ID     string `json:"id"`
+					Number int    `json:"number"`
+					Title  string `json:"title"`
+				} `json:"issue"`
+			} `json:"repository"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	resp, err := p.client.Do(ctx, req, &issueResult)
 	if err != nil {
-		return fmt.Errorf("failed to execute GraphQL request: %w", err)
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				return fmt.Errorf("failed to get issue (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+			}
+		}
+		return fmt.Errorf("failed to execute GraphQL request for issue: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to get issue (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+	}
+
+	if len(issueResult.Errors) > 0 {
+		for _, err := range issueResult.Errors {
+			slog.Error("graphql error", "message", err.Message)
+		}
+		return fmt.Errorf("graphql errors occurred while getting issue")
+	}
+
+	slog.Debug("got issue details",
+		"issue_id", issueResult.Data.Repository.Issue.ID,
+		"issue_number", issueResult.Data.Repository.Issue.Number,
+		"issue_title", issueResult.Data.Repository.Issue.Title)
+
+	// 2. Adicionar ao projeto
+	varsMutation := map[string]interface{}{"projectId": project.ProjectID, "contentId": issueResult.Data.Repository.Issue.ID}
+	req, err = p.client.NewRequest("POST", "graphql", map[string]interface{}{
+		"query":     mutationAddProjectV2ItemById,
+		"variables": varsMutation,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create GraphQL request for adding to project: %w", err)
+	}
+
+	var mutationResult struct {
+		Data struct {
+			AddProjectV2ItemById struct {
+				Item struct {
+					ID      string `json:"id"`
+					Content struct {
+						Number int    `json:"number"`
+						Title  string `json:"title"`
+					} `json:"content"`
+				} `json:"item"`
+			} `json:"addProjectV2ItemById"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	resp, err = p.client.Do(ctx, req, &mutationResult)
+	if err != nil {
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				return fmt.Errorf("failed to add issue to project (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
+			}
+		}
+		return fmt.Errorf("failed to execute GraphQL request for adding to project: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -216,6 +302,17 @@ func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Is
 		return fmt.Errorf("failed to add issue to project (status: %d, body: %s)", resp.StatusCode, string(bodyBytes))
 	}
 
-	slog.Info("issue added to project", "issue_number", issue.GetNumber(), "project_number", project.ProjectNumber)
+	if len(mutationResult.Errors) > 0 {
+		for _, err := range mutationResult.Errors {
+			slog.Error("graphql error", "message", err.Message)
+		}
+		return fmt.Errorf("graphql errors occurred while adding to project")
+	}
+
+	slog.Info("issue added to project",
+		"issue_number", issueResult.Data.Repository.Issue.Number,
+		"project_number", project.ProjectNumber,
+		"project_item_id", mutationResult.Data.AddProjectV2ItemById.Item.ID,
+		"issue_title", mutationResult.Data.AddProjectV2ItemById.Item.Content.Title)
 	return nil
 }

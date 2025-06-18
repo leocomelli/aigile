@@ -4,16 +4,13 @@ package prompt
 type ItemType string
 
 const (
-	Epic      ItemType = "Epic"
-	Feature   ItemType = "Feature"
 	UserStory ItemType = "User Story"
-	Task      ItemType = "Task"
 )
 
 // IsValid checks if the item type is valid
 func (t ItemType) IsValid() bool {
 	switch t {
-	case Epic, Feature, UserStory, Task:
+	case UserStory:
 		return true
 	default:
 		return false

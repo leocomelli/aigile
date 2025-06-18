@@ -25,9 +25,9 @@ func NewOpenAIProvider(config Config) *OpenAIProvider {
 	}
 }
 
-func (p *OpenAIProvider) GenerateContent(itemType prompt.ItemType, parent, ctx string, criteria []string, language string) (*GeneratedContent, error) {
+func (p *OpenAIProvider) GenerateContent(itemType prompt.ItemType, parent, ctx string, criteria []string, language string, generateTasks bool) (*GeneratedContent, error) {
 	// Get the appropriate prompt for the item type
-	promptText, err := p.prompts.GetPrompt(itemType, parent, ctx, criteria, language)
+	promptText, err := p.prompts.GetPrompt(itemType, parent, ctx, criteria, language, generateTasks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get prompt: %w", err)
 	}
@@ -94,6 +94,9 @@ func validateGeneratedContent(content *GeneratedContent) error {
 	}
 	if content.Type == "" {
 		return fmt.Errorf("type is required")
+	}
+	if len(content.AcceptanceCriteria) == 0 {
+		return fmt.Errorf("at least one acceptance criterion is required")
 	}
 	return nil
 }

@@ -27,15 +27,6 @@ func (m *mockIssuesService) Edit(ctx context.Context, owner string, repo string,
 	return args.Get(0).(*github.Issue), args.Get(1).(*github.Response), args.Error(2)
 }
 
-type mockRepositoriesService struct {
-	mock.Mock
-}
-
-func (m *mockRepositoriesService) Get(ctx context.Context, owner, repo string) (*github.Repository, *github.Response, error) {
-	args := m.Called(ctx, owner, repo)
-	return args.Get(0).(*github.Repository), args.Get(1).(*github.Response), args.Error(2)
-}
-
 type mockHTTPClient struct {
 	mock.Mock
 }
@@ -129,6 +120,7 @@ func TestGitHubProvider_CreateIssue_WithProject(t *testing.T) {
 	project := &ProjectInfo{
 		ProjectNumber: 1,
 		ProjectOwner:  "testowner",
+		ProjectID:     "project-node-id",
 	}
 
 	// Act
@@ -139,6 +131,7 @@ func TestGitHubProvider_CreateIssue_WithProject(t *testing.T) {
 	assert.NotNil(t, createdIssue)
 	assert.Equal(t, issueNumber, *createdIssue.Number)
 	mockIssues.AssertExpectations(t)
+	// We do not test the real GraphQL call, but we ensure the flow does not break
 }
 
 func TestGitHubProvider_CreateIssue_Error(t *testing.T) {
@@ -206,4 +199,285 @@ type mockTransport struct {
 
 func (t *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.mock.Do(req)
+}
+
+func TestGitHubProvider_GetProjectByName_Success(t *testing.T) {
+	// Arrange
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	graphqlResponse := `{"data":{"repositoryOwner":{"projectsV2":{"nodes":[{"id":"project-id-1","number":1,"title":"Project 1"}],"totalCount":1}}}}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(graphqlResponse)),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp, nil)
+
+	// Act
+	ctx := context.Background()
+	project, err := provider.GetProjectByName(ctx, "Project 1")
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, project)
+	assert.Equal(t, "project-id-1", project.ProjectID)
+	assert.Equal(t, 1, project.ProjectNumber)
+}
+
+func TestGitHubProvider_GetProjectByName_NotFound(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	graphqlResponse := `{"data":{"repositoryOwner":{"projectsV2":{"nodes":[{"id":"project-id-1","number":1,"title":"Project 1"}],"totalCount":1}}}}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(graphqlResponse)),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp, nil)
+
+	ctx := context.Background()
+	project, err := provider.GetProjectByName(ctx, "Nonexistent Project")
+	assert.Error(t, err)
+	assert.Nil(t, project)
+	assert.Contains(t, err.Error(), "project not found")
+}
+
+func TestGitHubProvider_GetProjectByName_RequestError(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	// Em vez de retornar nil, retorne um *http.Response vazio para evitar panic
+	emptyResp := &http.Response{
+		StatusCode: 500,
+		Body:       io.NopCloser(bytes.NewBufferString("")),
+	}
+	mockClient.On("Do", mock.Anything).Return(emptyResp, errors.New("request failed"))
+
+	ctx := context.Background()
+	project, err := provider.GetProjectByName(ctx, "Project 1")
+	assert.Error(t, err)
+	assert.Nil(t, project)
+	assert.Contains(t, err.Error(), "failed to execute GraphQL request")
+}
+
+func TestGitHubProvider_GetProjectByName_GraphQLError(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	graphqlResponse := `{"data":{"repositoryOwner":{"projectsV2":{"nodes":[],"totalCount":0}}},"errors":[{"message":"Some GraphQL error"}]}`
+	resp := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(graphqlResponse)),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp, nil)
+
+	ctx := context.Background()
+	project, err := provider.GetProjectByName(ctx, "Project 1")
+	assert.Error(t, err)
+	assert.Nil(t, project)
+	assert.Contains(t, err.Error(), "graphql errors occurred")
+}
+
+func TestGitHubProvider_GetProjectByName_StatusCodeNot200(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	resp := &http.Response{
+		StatusCode: 404,
+		Body:       io.NopCloser(bytes.NewBufferString("not found")),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp, nil)
+
+	ctx := context.Background()
+	project, err := provider.GetProjectByName(ctx, "Project 1")
+	assert.Error(t, err)
+	assert.Nil(t, project)
+	assert.Contains(t, err.Error(), "failed to get projects (status: 404, body: not found)")
+}
+
+func TestGitHubProvider_GetProjectByName_MalformedJSON(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	resp := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString("{invalid json}")),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp, nil)
+
+	ctx := context.Background()
+	project, err := provider.GetProjectByName(ctx, "Project 1")
+	assert.Error(t, err)
+	assert.Nil(t, project)
+}
+
+func TestGitHubProvider_addIssueToProject_Success(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	// 1. Buscar node_id da issue
+	issueNodeResponse := `{"data":{"repository":{"issue":{"id":"issue-node-id","number":1,"title":"Test Issue"}}}}`
+	resp1 := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(issueNodeResponse)),
+	}
+	// 2. Adicionar ao projeto
+	addProjectResponse := `{"data":{"addProjectV2ItemById":{"item":{"id":"item-id","content":{"number":1,"title":"Test Issue"}}}}}`
+	resp2 := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(addProjectResponse)),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp1, nil).Once()
+	mockClient.On("Do", mock.Anything).Return(resp2, nil).Once()
+
+	issue := &github.Issue{Number: github.Int(1)}
+	project := &ProjectInfo{ProjectID: "project-id", ProjectNumber: 1}
+
+	err := provider.addIssueToProject(context.Background(), issue, project)
+	assert.NoError(t, err)
+}
+
+func TestGitHubProvider_addIssueToProject_NodeIDError(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	emptyResp := &http.Response{
+		StatusCode: 500,
+		Body:       io.NopCloser(bytes.NewBufferString("")),
+	}
+	mockClient.On("Do", mock.Anything).Return(emptyResp, errors.New("request failed")).Once()
+
+	issue := &github.Issue{Number: github.Int(1)}
+	project := &ProjectInfo{ProjectID: "project-id", ProjectNumber: 1}
+
+	err := provider.addIssueToProject(context.Background(), issue, project)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute GraphQL request for issue")
+}
+
+func TestGitHubProvider_addIssueToProject_AddProjectError(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	// 1. Buscar node_id da issue
+	issueNodeResponse := `{"data":{"repository":{"issue":{"id":"issue-node-id","number":1,"title":"Test Issue"}}}}`
+	resp1 := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(issueNodeResponse)),
+	}
+	// 2. Falha ao adicionar ao projeto
+	emptyResp := &http.Response{
+		StatusCode: 500,
+		Body:       io.NopCloser(bytes.NewBufferString("")),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp1, nil).Once()
+	mockClient.On("Do", mock.Anything).Return(emptyResp, errors.New("request failed")).Once()
+
+	issue := &github.Issue{Number: github.Int(1)}
+	project := &ProjectInfo{ProjectID: "project-id", ProjectNumber: 1}
+
+	err := provider.addIssueToProject(context.Background(), issue, project)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute GraphQL request for adding to project")
+}
+
+func TestGitHubProvider_addIssueToProject_GraphQLError(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	// 1. Buscar node_id da issue
+	issueNodeResponse := `{"data":{"repository":{"issue":{"id":"issue-node-id","number":1,"title":"Test Issue"}}},"errors":[{"message":"Some GraphQL error"}]}`
+	resp1 := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(issueNodeResponse)),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp1, nil).Once()
+
+	issue := &github.Issue{Number: github.Int(1)}
+	project := &ProjectInfo{ProjectID: "project-id", ProjectNumber: 1}
+
+	err := provider.addIssueToProject(context.Background(), issue, project)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "graphql errors occurred while getting issue")
+}
+
+func TestGitHubProvider_addIssueToProject_StatusCodeNot200(t *testing.T) {
+	mockClient := new(mockHTTPClient)
+	client := github.NewClient(&http.Client{Transport: &mockTransport{mock: mockClient}})
+	provider := &GitHubProvider{
+		owner:  "testowner",
+		repo:   "testrepo",
+		client: client,
+	}
+
+	// 1. Buscar node_id da issue
+	issueNodeResponse := `{"data":{"repository":{"issue":{"id":"issue-node-id","number":1,"title":"Test Issue"}}}}`
+	resp1 := &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString(issueNodeResponse)),
+	}
+	// 2. Status code diferente de 200 ao adicionar ao projeto
+	resp2 := &http.Response{
+		StatusCode: 403,
+		Body:       io.NopCloser(bytes.NewBufferString("forbidden")),
+	}
+	mockClient.On("Do", mock.Anything).Return(resp1, nil).Once()
+	mockClient.On("Do", mock.Anything).Return(resp2, nil).Once()
+
+	issue := &github.Issue{Number: github.Int(1)}
+	project := &ProjectInfo{ProjectID: "project-id", ProjectNumber: 1}
+
+	err := provider.addIssueToProject(context.Background(), issue, project)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add issue to project (status: 403, body: forbidden)")
 }
