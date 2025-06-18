@@ -10,10 +10,22 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+// Interface for OpenAI client
+// Allows mocking in tests
+// Only the method used is included
+
+type ChatClient interface {
+	CreateChatCompletion(ctx context.Context, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error)
+}
+
+type PromptManager interface {
+	GetPrompt(itemType prompt.ItemType, parent, ctx string, criteria []string, language string, generateTasks bool) (string, error)
+}
+
 type OpenAIProvider struct {
-	client  *openai.Client
+	client  ChatClient
 	model   string
-	prompts *prompt.Manager
+	prompts PromptManager
 }
 
 func NewOpenAIProvider(config Config) *OpenAIProvider {
