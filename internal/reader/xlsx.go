@@ -31,9 +31,19 @@ func (r *XLSXReader) Read() ([]Item, error) {
 	}
 	defer f.Close()
 
-	rows, err := f.GetRows("Sheet1")
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, fmt.Errorf("failed to get rows: no sheets found")
+	}
+
+	sheetName := sheets[0]
+
+	rows, err := f.GetRows(sheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rows: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("failed to get rows: sheet '%s' is empty or invalid", sheetName)
 	}
 
 	var items []Item
