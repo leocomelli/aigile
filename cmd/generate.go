@@ -89,8 +89,9 @@ func runGenerate(cmd *cobra.Command, _ []string) error {
 		// Create issue in GitHub
 		title := content.Title
 		if title == "" {
-			title = fmt.Sprintf("[%s] %s", item.Type, item.Context[:50])
+			title = fmt.Sprintf("%s %s", item.Type, item.Context[:50])
 		}
+		title = fmt.Sprintf("[📖 User Story] %s", title)
 
 		// Get project info if parent is specified
 		var project *provider.ProjectInfo
@@ -112,18 +113,31 @@ func runGenerate(cmd *cobra.Command, _ []string) error {
 		}
 		slog.Info("issue created", "type", item.Type, "title", title, "number", createdIssue.GetNumber(), "project", project)
 
-		// If the auto-tasks flag is enabled and there are suggested tasks, create issues for each task
+		// If there are suggested tasks, create each one as an issue and collect their IDs
+		var taskIDs []int64
 		if autoTasks && len(content.SuggestedTasks) > 0 {
 			for _, task := range content.SuggestedTasks {
-				taskTitle := fmt.Sprintf("[Task] %s", task)
+				taskTitle := fmt.Sprintf("[🛠️ Task] %s", task)
 				taskDescription := fmt.Sprintf("Task for User Story #%d: %s\n\n%s", createdIssue.GetNumber(), title, task)
 
-				_, err := githubProvider.CreateIssue(taskTitle, taskDescription, []string{"Task"}, project)
+				taskIssue, err := githubProvider.CreateIssue(taskTitle, taskDescription, []string{"Task"}, project)
 				if err != nil {
 					slog.Warn("failed to create task issue", "task", task, "error", err)
 					continue
 				}
-				slog.Info("task issue created", "task", task)
+				slog.Info("task issue created", "task", task, "number", taskIssue.GetNumber())
+				if taskIssue.GetID() != 0 {
+					taskIDs = append(taskIDs, taskIssue.GetID())
+				}
+			}
+			// Add the tasks as sub-issues of the User Story
+			if len(taskIDs) > 0 {
+				for _, taskID := range taskIDs {
+					err := githubProvider.AddSubIssue(createdIssue.GetNumber(), taskID)
+					if err != nil {
+						slog.Warn("failed to add sub-issue", "error", err)
+					}
+				}
 			}
 		}
 	}

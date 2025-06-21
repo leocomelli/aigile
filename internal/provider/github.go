@@ -2,10 +2,14 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"os"
 
 	"github.com/google/go-github/v60/github"
 	"golang.org/x/oauth2"
@@ -356,5 +360,42 @@ func (p *GitHubProvider) addIssueToProject(ctx context.Context, issue *github.Is
 		"project_number", project.ProjectNumber,
 		"project_item_id", mutationResult.Data.AddProjectV2ItemByID.Item.ID,
 		"issue_title", mutationResult.Data.AddProjectV2ItemByID.Item.Content.Title)
+	return nil
+}
+
+// AddSubIssue adds sub-issue to a parent issue using the GitHub REST API.
+func (p *GitHubProvider) AddSubIssue(parentNumber int, childID int64) error {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/sub_issues", p.owner, p.repo, parentNumber)
+	slog.Debug("adding sub-issues", "url", url, "parent_number", parentNumber, "child_id", childID)
+	body := map[string]interface{}{
+		"sub_issue_id": childID,
+	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal sub-issues body: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return fmt.Errorf("failed to create sub-issues request: %w", err)
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("GITHUB_TOKEN")))
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute sub-issues request: %w", err)
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			slog.Warn("failed to close response body", "error", cerr)
+		}
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to add sub-issues (status: %d, body: %s)", resp.StatusCode, string(respBody))
+	}
 	return nil
 }
