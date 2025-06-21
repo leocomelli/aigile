@@ -54,3 +54,11 @@ jobs:
           files: ./coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        with:
+          projectBaseDir: .
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: "https://sonarcloud.io"
