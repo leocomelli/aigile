@@ -28,6 +28,14 @@ linters:
         text: "seems to be unused"
         linters:
           - revive
+      - path: _test\.go
+        text: "is not checked"
+        linters:
+          - errcheck
+      - path: _test\.go
+        text: "Errors unhandled"
+        linters:
+          - gosec
 
 formatters:
   enable:

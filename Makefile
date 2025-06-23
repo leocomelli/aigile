@@ -21,8 +21,10 @@ build:
 test:
 	$(GO) test ./... -v -race -cover
 
+# To run all integration tests (GitHub and Google Sheets), use:
+# make integration-test GOOGLE_SHEET_ID=your_id GOOGLE_CREDENTIALS_FILE=your_credentials.json
 integration-test:
-	$(GO) test -v -race -tags=integration ./internal/provider -run Integration
+	$(GO) test -v -race -tags=integration ./internal/provider ./internal/reader -run Integration
 
 lint:
 	export GOROOT=$(go env GOROOT) && golangci-lint run --config .golangci.yml ./...

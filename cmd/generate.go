@@ -23,9 +23,10 @@ var generateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(generateCmd)
-	generateCmd.Flags().StringP("file", "f", "", "Path to XLSX file")
+	generateCmd.Flags().StringP("file", "f", "", "Path to XLSX file or Google Sheets URL")
 	generateCmd.Flags().StringP("language", "g", "english", "Language to generate the content (e.g., english, portuguese)")
 	generateCmd.Flags().Bool("auto-tasks", false, "Automatically generate and create tasks for each user story")
+	generateCmd.Flags().String("google-credentials-file", "", "Path to Google Service Account credentials JSON file (required for Google Sheets)")
 	if err := generateCmd.MarkFlagRequired("file"); err != nil {
 		panic(fmt.Sprintf("failed to mark 'file' flag as required: %v", err))
 	}
@@ -36,14 +37,23 @@ func runGenerate(cmd *cobra.Command, _ []string) error {
 	filePath, _ := cmd.Flags().GetString("file")
 	language, _ := cmd.Flags().GetString("language")
 	autoTasks, _ := cmd.Flags().GetBool("auto-tasks")
+	googleCredentialsFile, _ := cmd.Flags().GetString("google-credentials-file")
 	slog.Info("starting generate command", "file", filePath, "language", language, "autoTasks", autoTasks)
 
-	// Initialize XLSX reader
-	xlsxReader := reader.NewXLSXReader(filePath)
-	items, err := xlsxReader.Read()
-	if err != nil {
-		return fmt.Errorf("failed to read XLSX file: %w", err)
+	var r reader.Reader
+	if strings.HasPrefix(filePath, "https://docs.google.com/spreadsheets/") {
+		if googleCredentialsFile == "" {
+			return fmt.Errorf("google-credentials-file flag is required for Google Sheets")
+		}
+		r = reader.NewGoogleSheetsReader(extractSpreadsheetID(filePath), googleCredentialsFile)
+	} else {
+		r = reader.NewXLSXReader(filePath)
 	}
+	items, err := r.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+	slog.Debug("items read from input source", "items", items)
 
 	// Initialize LLM provider
 	llmConfig := llm.Config{
@@ -171,4 +181,15 @@ func formatDescription(content *llm.GeneratedContent) string {
 	}
 
 	return sb.String()
+}
+
+// extractSpreadsheetID extrai o ID da planilha de uma URL do Google Sheets.
+func extractSpreadsheetID(url string) string {
+	const prefix = "https://docs.google.com/spreadsheets/d/"
+	if !strings.HasPrefix(url, prefix) {
+		return ""
+	}
+	idAndRest := strings.TrimPrefix(url, prefix)
+	parts := strings.SplitN(idAndRest, "/", 2)
+	return parts[0]
 }

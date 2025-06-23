@@ -4,12 +4,14 @@ package reader
 import (
 	"fmt"
 
+	"log/slog"
+
 	"github.com/leocomelli/aigile/internal/prompt"
 	"github.com/xuri/excelize/v2"
 )
 
-// Item represents a row/item read from the XLSX file.
-type Item struct {
+// Item represents a row read from a source (XLSX, Google Sheets, etc).
+type Item = struct {
 	Type     prompt.ItemType
 	Parent   string
 	Context  string
@@ -37,7 +39,7 @@ func (r *XLSXReader) Read() ([]Item, error) {
 	defer func() {
 		err := f.Close()
 		if err != nil {
-			fmt.Printf("failed to close xlsx file: %v\n", err)
+			slog.Warn("failed to close xlsx file", "error", err)
 		}
 	}()
 
