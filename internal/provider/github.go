@@ -101,6 +101,52 @@ func NewGitHubProvider(config GitHubConfig) (*GitHubProvider, error) {
 	return provider, nil
 }
 
+// githubIssueWrapper wraps *github.Issue to implement the Issue interface.
+type githubIssueWrapper struct {
+	issue *github.Issue
+}
+
+func (w *githubIssueWrapper) GetNumber() int {
+	if w.issue.Number != nil {
+		return *w.issue.Number
+	}
+	return 0
+}
+func (w *githubIssueWrapper) GetID() int64 {
+	if w.issue.ID != nil {
+		return *w.issue.ID
+	}
+	return 0
+}
+func (w *githubIssueWrapper) GetHTMLURL() string {
+	if w.issue.HTMLURL != nil {
+		return *w.issue.HTMLURL
+	}
+	return ""
+}
+func (w *githubIssueWrapper) GetTitle() string {
+	if w.issue.Title != nil {
+		return *w.issue.Title
+	}
+	return ""
+}
+func (w *githubIssueWrapper) GetBody() string {
+	if w.issue.Body != nil {
+		return *w.issue.Body
+	}
+	return ""
+}
+func (w *githubIssueWrapper) GetLabels() []string {
+	labels := w.issue.Labels
+	var result []string
+	for _, l := range labels {
+		if l.Name != nil {
+			result = append(result, *l.Name)
+		}
+	}
+	return result
+}
+
 // CreateIssue creates a new issue in the configured GitHub repository and optionally adds it to a project.
 func (p *GitHubProvider) CreateIssue(title, description string, labels []string, project *ProjectInfo) (Issue, error) {
 	ctx := context.Background()
@@ -130,7 +176,7 @@ func (p *GitHubProvider) CreateIssue(title, description string, labels []string,
 		}
 	}
 
-	return createdIssue, nil
+	return &githubIssueWrapper{issue: createdIssue}, nil
 }
 
 // GetProjectByName fetches project information using the project name.

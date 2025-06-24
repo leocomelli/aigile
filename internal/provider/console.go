@@ -17,6 +17,9 @@ type Issue interface {
 	GetNumber() int
 	GetID() int64
 	GetHTMLURL() string
+	GetTitle() string
+	GetBody() string
+	GetLabels() []string
 }
 
 // ConsoleProvider implements a provider that prints issues to the console instead of creating them externally.
