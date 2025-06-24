@@ -83,7 +83,7 @@ func TestGitHubProvider_CreateIssue_Success(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.NotNil(t, createdIssue)
-	assert.Equal(t, issueNumber, *createdIssue.Number)
+	assert.Equal(t, issueNumber, createdIssue.GetNumber())
 	mockIssues.AssertExpectations(t)
 }
 
@@ -133,7 +133,7 @@ func TestGitHubProvider_CreateIssue_WithProject(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.NotNil(t, createdIssue)
-	assert.Equal(t, issueNumber, *createdIssue.Number)
+	assert.Equal(t, issueNumber, createdIssue.GetNumber())
 	mockIssues.AssertExpectations(t)
 	// We do not test the real GraphQL call, but we ensure the flow does not break
 }

@@ -60,7 +60,7 @@ func TestGitHubProvider_Integration_CreateIssue(t *testing.T) {
 	}
 
 	require.NotNil(t, createdIssue)
-	require.NotNil(t, createdIssue.Number)
+	require.NotZero(t, createdIssue.GetNumber())
 	require.NotEmpty(t, createdIssue.GetHTMLURL())
 }
 

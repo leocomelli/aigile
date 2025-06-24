@@ -102,7 +102,7 @@ func NewGitHubProvider(config GitHubConfig) (*GitHubProvider, error) {
 }
 
 // CreateIssue creates a new issue in the configured GitHub repository and optionally adds it to a project.
-func (p *GitHubProvider) CreateIssue(title, description string, labels []string, project *ProjectInfo) (*github.Issue, error) {
+func (p *GitHubProvider) CreateIssue(title, description string, labels []string, project *ProjectInfo) (Issue, error) {
 	ctx := context.Background()
 
 	issue := &github.IssueRequest{

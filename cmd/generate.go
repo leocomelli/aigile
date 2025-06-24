@@ -71,15 +71,26 @@ func runGenerate(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("unsupported LLM provider: %s", llmConfig.Provider)
 	}
 
-	// Initialize GitHub provider
-	githubConfig := provider.GitHubConfig{
-		Token: os.Getenv("GITHUB_TOKEN"),
-		Owner: os.Getenv("GITHUB_OWNER"),
-		Repo:  os.Getenv("GITHUB_REPO"),
-	}
-	githubProvider, err := provider.NewGitHubProvider(githubConfig)
-	if err != nil {
-		return fmt.Errorf("failed to initialize GitHub provider: %w", err)
+	// Initialize GitHub or Console provider
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	githubOwner := os.Getenv("GITHUB_OWNER")
+	githubRepo := os.Getenv("GITHUB_REPO")
+
+	var githubProvider provider.Provider
+
+	if githubToken == "" || githubOwner == "" || githubRepo == "" {
+		slog.Info("GitHub environment variables not set. Using ConsoleProvider.")
+		githubProvider = provider.NewConsoleProvider()
+	} else {
+		var err error
+		githubProvider, err = provider.NewGitHubProvider(provider.GitHubConfig{
+			Token: githubToken,
+			Owner: githubOwner,
+			Repo:  githubRepo,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to initialize GitHub provider: %w", err)
+		}
 	}
 
 	// Process each item
@@ -111,7 +122,7 @@ func runGenerate(cmd *cobra.Command, _ []string) error {
 			project, err = githubProvider.GetProjectByName(context.Background(), item.Parent)
 			if err != nil {
 				slog.Warn("failed to get project info", "parent", item.Parent, "error", err)
-			} else {
+			} else if project != nil {
 				slog.Debug("project found", "number", project.ProjectNumber, "owner", project.ProjectOwner)
 			}
 		}
