@@ -7,11 +7,12 @@ toolchain go1.24.3
 require (
 	github.com/google/go-github/v60 v60.0.0
 	github.com/lmittmann/tint v1.1.2
-	github.com/sashabaranov/go-openai v1.40.2
+	github.com/sashabaranov/go-openai v1.40.3
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/xuri/excelize/v2 v2.9.1
 	golang.org/x/oauth2 v0.30.0
+	google.golang.org/api v0.238.0
 )
 
 require (
@@ -45,7 +46,6 @@ require (
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
-	google.golang.org/api v0.238.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	google.golang.org/grpc v1.73.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
